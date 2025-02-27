@@ -7,12 +7,11 @@ import pandas as pd
 from telebot import types
 from unidecode import unidecode
 
-
-API_TOKEN = '7661814317:AAHUOBKSXMy8UQsgYqOvLLEjcUth5qwDM00'  
+API_TOKEN = os.getenv("API_TOKEN")  # Railway'dagi Environment Variable'dan olish
+CHANNEL_USERNAME = os.getenv("CHANNEL_USERNAME")  # Kanal username'ni olish
 bot = telebot.TeleBot(API_TOKEN)
 
 ADMIN_USERNAME = "Ruzimov_Jasurbek"
-CHANNEL_USERNAME = '@RuzimovDev'
 
 USERS_FILE = 'users.json'
 WINNERS_FILE = 'winners.json'

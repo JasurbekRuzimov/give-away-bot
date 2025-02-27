@@ -1,2 +1,5 @@
-telebot
+pandas
+pyTelegramBotAPI
 openpyxl
+unidecode
+python-dotenv
