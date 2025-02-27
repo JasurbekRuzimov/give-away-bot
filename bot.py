@@ -11,7 +11,7 @@ load_dotenv()
 
 API_TOKEN = os.getenv("API_TOKEN")
 CHANNEL_USERNAME = os.getenv("CHANNEL_USERNAME")
-DATABASE_URL = os.getenv("DATABASE_URL")
+DATABASE_URL = 'postgresql://postgres:qiBjlmKMGXpmQbScbBkZVjznzbpjddSJ@postgres.railway.internal:5432/railway'
 
 bot = telebot.TeleBot(API_TOKEN)
 ADMIN_USERNAME = "Ruzimov_Jasurbek"
