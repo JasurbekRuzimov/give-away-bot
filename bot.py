@@ -1,38 +1,49 @@
 import telebot
 import random
-import openpyxl
-import json
-import os
 import pandas as pd
+import os
+import psycopg2
 from telebot import types
 from unidecode import unidecode
+from dotenv import load_dotenv
 
-API_TOKEN = os.getenv("API_TOKEN")  # Railway'dagi Environment Variable'dan olish
-CHANNEL_USERNAME = os.getenv("CHANNEL_USERNAME")  # Kanal username'ni olish
+load_dotenv()
+
+API_TOKEN = os.getenv("API_TOKEN")
+CHANNEL_USERNAME = os.getenv("CHANNEL_USERNAME")
+DATABASE_URL = os.getenv("DATABASE_URL")
+
 bot = telebot.TeleBot(API_TOKEN)
-
 ADMIN_USERNAME = "Ruzimov_Jasurbek"
 
-USERS_FILE = 'users.json'
-WINNERS_FILE = 'winners.json'
+def get_db_connection():
+    return psycopg2.connect(DATABASE_URL, sslmode="require")
 
-def load_users():
-    try:
-        with open(USERS_FILE, 'r') as file:
-            data = json.load(file)
-            return data if isinstance(data, list) else []
-    except (FileNotFoundError, json.JSONDecodeError):
-        return []
+def create_users_table():
+    conn = get_db_connection()
+    cur = conn.cursor()
+    cur.execute('''
+        CREATE TABLE IF NOT EXISTS users (
+            id BIGINT PRIMARY KEY,
+            username TEXT,
+            first_name TEXT,
+            last_name TEXT,
+            full_phone_number TEXT,
+            masked_phone_number TEXT
+        )
+    ''')
+    conn.commit()
+    cur.close()
+    conn.close()
 
-def save_users():
-    with open(USERS_FILE, 'w') as file:
-        json.dump(users, file, indent=4)
-
-users = load_users()
-previous_winners = []
+create_users_table()
 
 def is_admin(message):
     return message.from_user.username == ADMIN_USERNAME
+
+def sanitize_text(text):
+    import re
+    return unidecode(re.sub(r'[^\w\s]', '', text))
 
 @bot.message_handler(commands=['start'])
 def start(message):
@@ -44,27 +55,18 @@ def start(message):
     bot.send_message(
         message.chat.id,
         f"Assalomu alaykum, {sanitize_text(message.from_user.first_name)}! 🎉\n\n"
-        f"📚 Giveaway’da ishtirok etish uchun quyidagilarni bajaring:\n"
-        f"1️⃣ Kanalga obuna bo‘ling.\n"
-        f"2️⃣ Giveaway tugmasini bosing.\n\n"
-        f"G‘olib tasodifiy tanlanadi. Omad tilaymiz! 😊",
+        f"📚 Giveaway’da ishtirok etish uchun kanalga a'zo bo‘ling va ro‘yxatdan o‘ting!",
         reply_markup=markup
     )
 
 @bot.callback_query_handler(func=lambda call: call.data == "join")
 def join(call):
-    try:
-        user_status = bot.get_chat_member(CHANNEL_USERNAME, call.message.chat.id).status
-        if user_status in ['member', 'administrator', 'creator']:
-            if any(user.get("id") == call.message.chat.id for user in users):
-                bot.send_message(call.message.chat.id, "⚠️ Siz allaqachon ro‘yxatdan o‘tgansiz!")
-            else:
-                bot.send_message(call.message.chat.id, "🔸 Iltimos, ismingizni yuboring.")
-                bot.register_next_step_handler(call.message, get_user_first_name)
-        else:
-            bot.send_message(call.message.chat.id, "❌ Avval kanalga obuna bo‘ling!")
-    except Exception as e:
-        bot.send_message(call.message.chat.id, f"❌ Xatolik yuz berdi. Xato: {e}")
+    user_status = bot.get_chat_member(CHANNEL_USERNAME, call.message.chat.id).status
+    if user_status in ['member', 'administrator', 'creator']:
+        bot.send_message(call.message.chat.id, "🔸 Iltimos, ismingizni yuboring.")
+        bot.register_next_step_handler(call.message, get_user_first_name)
+    else:
+        bot.send_message(call.message.chat.id, "❌ Avval kanalga obuna bo‘ling!")
 
 def get_user_first_name(message):
     first_name = sanitize_text(message.text)
@@ -77,29 +79,24 @@ def get_user_last_name(message, first_name):
     bot.register_next_step_handler(message, get_user_phone_number, first_name, last_name)
 
 def get_user_phone_number(message, first_name, last_name):
-    if message.contact is None:
+    if not message.contact:
         bot.send_message(message.chat.id, "⚠️ Iltimos, telefon raqamingizni to‘g‘ri yuboring.")
         bot.register_next_step_handler(message, get_user_phone_number, first_name, last_name)
-    else:
-        full_phone_number = message.contact.phone_number
-        masked_phone_number = "****" + full_phone_number[-4:]
+        return
 
-        username = message.from_user.username or "Username mavjud emas"
-        user = {
-            "id": message.chat.id,
-            "username": username,
-            "first_name": first_name,
-            "last_name": last_name,
-            "full_phone_number": full_phone_number,
-            "masked_phone_number": masked_phone_number
-        }
+    full_phone_number = message.contact.phone_number
+    masked_phone_number = "****" + full_phone_number[-4:]
+    username = message.from_user.username or "Username mavjud emas"
 
-        if any(existing_user["id"] == user["id"] for existing_user in users):
-            bot.send_message(message.chat.id, "⚠️ Siz allaqachon ro‘yxatdasiz!")
-        else:
-            users.append(user)
-            save_users()
-            bot.send_message(message.chat.id, f"✅ Siz muvaffaqiyatli ro‘yxatdan o‘tdingiz!")
+    conn = get_db_connection()
+    cur = conn.cursor()
+    cur.execute("INSERT INTO users VALUES (%s, %s, %s, %s, %s, %s) ON CONFLICT DO NOTHING", 
+                (message.chat.id, username, first_name, last_name, full_phone_number, masked_phone_number))
+    conn.commit()
+    cur.close()
+    conn.close()
+
+    bot.send_message(message.chat.id, "✅ Siz muvaffaqiyatli ro‘yxatdan o‘tdingiz!")
 
 def phone_number_markup():
     markup = types.ReplyKeyboardMarkup(one_time_keyboard=True, resize_keyboard=True)
@@ -113,22 +110,25 @@ def select_winners(message):
         bot.send_message(message.chat.id, "❌ Sizda bu buyruqdan foydalanish huquqi yo‘q!")
         return
 
-    global previous_winners
-    num_winners = 2  
-    eligible_users = [user for user in users if user["id"] not in [w["id"] for w in previous_winners]]
+    conn = get_db_connection()
+    cur = conn.cursor()
+    cur.execute("SELECT * FROM users")
+    users = cur.fetchall()
+    cur.close()
+    conn.close()
 
-    if len(eligible_users) < num_winners:
+    num_winners = 2
+    if len(users) < num_winners:
         bot.send_message(message.chat.id, "⚠️ Yetarlicha ishtirokchilar yo‘q!")
         return
 
-    selected_winners = random.sample(eligible_users, num_winners)
+    winners = random.sample(users, num_winners)
     winner_text = "🎉 G‘oliblar:\n"
-
-    for i, winner in enumerate(selected_winners, 1):
-        winner_text += f"{i}. {winner['first_name']} {winner['last_name']} - Telefon: {winner['masked_phone_number']} 🎉\n"
+    for i, winner in enumerate(winners, 1):
+        winner_text += f"{i}. {winner[2]} {winner[3]} - Telefon: {winner[5]} 🎉\n"
 
     bot.send_message(message.chat.id, winner_text)
-    previous_winners = selected_winners  
+    bot.send_message(f"@{CHANNEL_USERNAME[1:]}", "🏆 G‘oliblar e’lon qilindi!\n" + winner_text)
 
 @bot.message_handler(commands=['export'])
 def export_users(message):
@@ -136,17 +136,15 @@ def export_users(message):
         bot.send_message(message.chat.id, "❌ Sizda bu buyruqdan foydalanish huquqi yo‘q!")
         return
 
-    df = pd.DataFrame(users)
+    conn = get_db_connection()
+    df = pd.read_sql("SELECT * FROM users", conn)
+    conn.close()
+
     excel_file = "users.xlsx"
     df.to_excel(excel_file, index=False)
 
     with open(excel_file, "rb") as f:
         bot.send_document(message.chat.id, f)
 
-def sanitize_text(text):
-    import re
-    return unidecode(re.sub(r'[^\w\s]', '', text))
-
 if __name__ == "__main__":
-    bot.remove_webhook()
     bot.polling(none_stop=True)
