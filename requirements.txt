@@ -3,3 +3,4 @@ pyTelegramBotAPI
 openpyxl
 unidecode
 python-dotenv
+psycopg2-binary
