@@ -12,9 +12,9 @@ load_dotenv()
 API_TOKEN = os.getenv("API_TOKEN")
 CHANNEL_USERNAME = os.getenv("CHANNEL_USERNAME")
 DATABASE_URL = os.getenv("DATABASE_URL ")
+ADMIN_USERNAME = os.getenv("ADMIN_USERNAME")
 
 bot = telebot.TeleBot(API_TOKEN)
-ADMIN_USERNAME = "Ruzimov_Jasurbek"
 
 def get_db_connection():
     return psycopg2.connect(DATABASE_URL, sslmode="require")
