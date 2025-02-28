@@ -61,12 +61,24 @@ def start(message):
 
 @bot.callback_query_handler(func=lambda call: call.data == "join")
 def join(call):
-    user_status = bot.get_chat_member(CHANNEL_USERNAME, call.message.chat.id).status
-    if user_status in ['member', 'administrator', 'creator']:
-        bot.send_message(call.message.chat.id, "🔸 Iltimos, ismingizni yuboring.")
-        bot.register_next_step_handler(call.message, get_user_first_name)
+    conn = get_db_connection()
+    cur = conn.cursor()
+
+    cur.execute("SELECT id FROM users WHERE id = %s", (call.message.chat.id,))
+    existing_user = cur.fetchone()
+
+    if existing_user:
+        bot.send_message(call.message.chat.id, "✅ Siz allaqachon ro‘yxatdan o'tgansiz!")
     else:
-        bot.send_message(call.message.chat.id, "❌ Avval kanalga obuna bo‘ling!")
+        user_status = bot.get_chat_member(CHANNEL_USERNAME, call.message.chat.id).status
+        if user_status in ['member', 'administrator', 'creator']:
+            bot.send_message(call.message.chat.id, "🔸 Iltimos, ismingizni yuboring.")
+            bot.register_next_step_handler(call.message, get_user_first_name)
+        else:
+            bot.send_message(call.message.chat.id, "❌ Avval kanalga obuna bo‘ling!")
+
+    cur.close()
+    conn.close()
 
 def get_user_first_name(message):
     first_name = sanitize_text(message.text)
@@ -90,21 +102,13 @@ def get_user_phone_number(message, first_name, last_name):
 
     conn = get_db_connection()
     cur = conn.cursor()
-    
-    cur.execute("SELECT id FROM users WHERE id = %s", (message.chat.id,))
-    existing_user = cur.fetchone()
-
-    if existing_user:
-        bot.send_message(message.chat.id, "⚠️ Siz allaqachon ro‘yxatdan o‘tgansiz! Sabrli bo'ling!")
-    else:
-        cur.execute("INSERT INTO users (id, username, first_name, last_name, full_phone_number, masked_phone_number) VALUES (%s, %s, %s, %s, %s, %s)", 
-                    (message.chat.id, username, first_name, last_name, full_phone_number, masked_phone_number))
-        conn.commit()
-        bot.send_message(message.chat.id, "✅ Siz muvaffaqiyatli ro‘yxatdan o‘tdingiz!")
-
+    cur.execute("INSERT INTO users VALUES (%s, %s, %s, %s, %s, %s) ON CONFLICT DO NOTHING", 
+                (message.chat.id, username, first_name, last_name, full_phone_number, masked_phone_number))
+    conn.commit()
     cur.close()
     conn.close()
 
+    bot.send_message(message.chat.id, "✅ Siz muvaffaqiyatli ro‘yxatdan o‘tdingiz!")
 
 def phone_number_markup():
     markup = types.ReplyKeyboardMarkup(one_time_keyboard=True, resize_keyboard=True)
