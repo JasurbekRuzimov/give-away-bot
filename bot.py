@@ -17,11 +17,7 @@ bot = telebot.TeleBot(API_TOKEN)
 ADMIN_USERNAME = "Ruzimov_Jasurbek"
 
 def get_db_connection():
-    try:
-        conn = psycopg2.connect(DATABASE_URL, sslmode='require')
-        print("✅ PostgreSQL bazasiga muvaffaqiyatli ulandi!")
-    except Exception as e:
-         print("❌ PostgreSQL bilan bog‘lanishda xatolik:", e)
+    return psycopg2.connect(DATABASE_URL, sslmode="require")
 
 def create_users_table():
     conn = get_db_connection()
