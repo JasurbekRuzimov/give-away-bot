@@ -117,9 +117,19 @@ def phone_number_markup():
     return markup
 
 @bot.message_handler(commands=['winners'])
-def select_winners(message):
+def request_winner_count(message):
     if not is_admin(message):
         bot.send_message(message.chat.id, "❌ Sizda bu buyruqdan foydalanish huquqi yo‘q!")
+        return
+
+    bot.send_message(message.chat.id, "🏆 Nechta odam g‘olib bo‘lishi kerak?")
+    bot.register_next_step_handler(message, select_winners)
+
+def select_winners(message):
+    try:
+        num_winners = int(message.text)
+    except ValueError:
+        bot.send_message(message.chat.id, "⚠️ Iltimos, faqat son kiriting!")
         return
 
     conn = get_db_connection()
@@ -129,17 +139,21 @@ def select_winners(message):
     cur.close()
     conn.close()
 
-    num_winners = 2
     if len(users) < num_winners:
         bot.send_message(message.chat.id, "⚠️ Yetarlicha ishtirokchilar yo‘q!")
         return
 
     winners = random.sample(users, num_winners)
     winner_text = "🎉 G‘oliblar:\n"
+    
     for i, winner in enumerate(winners, 1):
         winner_text += f"{i}. {winner[2]} {winner[3]} - Telefon: {winner[5]} 🎉\n"
+        bot.send_message(winner[0], f"🎉 Tabriklaymiz! Siz Book Party g‘oliblaridan birisiz! 🏆\n"
+                                    f"Sizni g‘alaba bilan tabriklaymiz!\n"
+                                    f"📞 Telefon: {winner[5]}\n"
+                                    f"📩 Tez orada siz bilan bog‘lanamiz!")
 
-    bot.send_message(message.chat.id, winner_text)
+    bot.send_message(message.chat.id, "🏆 G‘oliblar e’lon qilindi!")
     bot.send_message(f"@{CHANNEL_USERNAME[1:]}", "🏆 G‘oliblar e’lon qilindi!\n" + winner_text)
 
 @bot.message_handler(commands=['export'])
